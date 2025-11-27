@@ -216,22 +216,30 @@ void InitSymbolHandles(int idx, string sym)
             Print("[", sym, "] Anchored VWAP non charge");
     }
     
-    //--- Volume Profile
+    //--- Volume Profile (GUI: charge uniquement pour le symbole du graphique actuel)
     g_symbols[idx].volumeProfileHandle = INVALID_HANDLE;
-    if(UseVolumeProfile)
+    if(UseVolumeProfile && sym == _Symbol)
     {
         g_symbols[idx].volumeProfileHandle = iCustom(sym, tf, VolumeProfileName);
         if(g_symbols[idx].volumeProfileHandle == INVALID_HANDLE)
             Print("[", sym, "] Volume Profile non charge");
     }
+    else if(UseVolumeProfile && sym != _Symbol)
+    {
+        Print("[", sym, "] Volume Profile ignore (interface graphique non supportee pour symboles secondaires)");
+    }
     
-    //--- Harmonic Pattern
+    //--- Harmonic Pattern (GUI: charge uniquement pour le symbole du graphique actuel)
     g_symbols[idx].harmonicHandle = INVALID_HANDLE;
-    if(UseHarmonicPattern)
+    if(UseHarmonicPattern && sym == _Symbol)
     {
         g_symbols[idx].harmonicHandle = iCustom(sym, tf, HarmonicPatternName);
         if(g_symbols[idx].harmonicHandle == INVALID_HANDLE)
             Print("[", sym, "] Harmonic Pattern non charge");
+    }
+    else if(UseHarmonicPattern && sym != _Symbol)
+    {
+        Print("[", sym, "] Harmonic Pattern ignore (interface graphique non supportee pour symboles secondaires)");
     }
     
     //--- Super Trend
@@ -252,22 +260,30 @@ void InitSymbolHandles(int idx, string sym)
             Print("[", sym, "] Auto Fibo MT5 non charge");
     }
     
-    //--- DrawFib Pro
+    //--- DrawFib Pro (GUI: charge uniquement pour le symbole du graphique actuel)
     g_symbols[idx].drawFibProHandle = INVALID_HANDLE;
-    if(UseDrawFibPro)
+    if(UseDrawFibPro && sym == _Symbol)
     {
         g_symbols[idx].drawFibProHandle = iCustom(sym, tf, DrawFibProName);
         if(g_symbols[idx].drawFibProHandle == INVALID_HANDLE)
             Print("[", sym, "] WH DrawFib Pro non charge");
     }
+    else if(UseDrawFibPro && sym != _Symbol)
+    {
+        Print("[", sym, "] DrawFib Pro ignore (interface graphique non supportee pour symboles secondaires)");
+    }
     
-    //--- Candlestick Patterns
+    //--- Candlestick Patterns (GUI: charge uniquement pour le symbole du graphique actuel)
     g_symbols[idx].candlestickPatternsHandle = INVALID_HANDLE;
-    if(UseCandlestickPatterns)
+    if(UseCandlestickPatterns && sym == _Symbol)
     {
         g_symbols[idx].candlestickPatternsHandle = iCustom(sym, tf, CandlestickPatternsName);
         if(g_symbols[idx].candlestickPatternsHandle == INVALID_HANDLE)
             Print("[", sym, "] Candlestick Patterns non charge");
+    }
+    else if(UseCandlestickPatterns && sym != _Symbol)
+    {
+        Print("[", sym, "] Candlestick Patterns ignore (interface graphique non supportee pour symboles secondaires)");
     }
     
     //--- Bollinger RSI ReEntry
