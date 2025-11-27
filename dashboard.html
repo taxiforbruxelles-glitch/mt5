@@ -1,0 +1,2438 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crystal Heikin Ashi - Dashboard v3.1</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.4/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: #fff;
+            min-height: 100vh;
+        }
+        
+        .header {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #0f3460;
+        }
+        
+        .header h1 {
+            font-size: 24px;
+            background: linear-gradient(90deg, #00d4ff, #7b2cbf);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #ff4444;
+            animation: pulse 2s infinite;
+        }
+        
+        .status-dot.connected {
+            background: #00ff88;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        /* Tabs */
+        .tabs {
+            display: flex;
+            background: rgba(0, 0, 0, 0.2);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .tab {
+            padding: 15px 30px;
+            cursor: pointer;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s;
+        }
+        
+        .tab:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+        
+        .tab.active {
+            border-bottom-color: #00d4ff;
+            background: rgba(0, 212, 255, 0.1);
+        }
+        
+        .tab-content {
+            display: none;
+            padding: 20px;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+        
+        .card {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 15px;
+            padding: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+        }
+        
+        .card-title {
+            font-size: 14px;
+            color: #888;
+            text-transform: uppercase;
+            margin-bottom: 15px;
+            letter-spacing: 1px;
+        }
+        
+        .signal-card {
+            grid-column: span 2;
+        }
+        
+        .current-signal {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+        }
+        
+        .signal-value {
+            text-align: center;
+            padding: 15px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 10px;
+        }
+        
+        .signal-value .label {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 5px;
+        }
+        
+        .signal-value .value {
+            font-size: 24px;
+            font-weight: bold;
+        }
+        
+        .trend-bullish { color: #00ff88; }
+        .trend-bearish { color: #ff4444; }
+        .trend-neutral { color: #ffaa00; }
+        
+        .momentum-shift {
+            background: linear-gradient(135deg, #7b2cbf, #00d4ff) !important;
+            animation: glow 1s ease-in-out infinite alternate;
+        }
+        
+        @keyframes glow {
+            from { box-shadow: 0 0 10px rgba(123, 44, 191, 0.5); }
+            to { box-shadow: 0 0 20px rgba(0, 212, 255, 0.8); }
+        }
+        
+        /* Form Styling */
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            margin-bottom: 15px;
+        }
+        
+        .form-group label {
+            font-size: 12px;
+            color: #888;
+        }
+        
+        .form-group input, .form-group select {
+            padding: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            background: rgba(0, 0, 0, 0.3);
+            color: #fff;
+            font-size: 14px;
+        }
+        
+        .form-group input:focus, .form-group select:focus {
+            outline: none;
+            border-color: #00d4ff;
+        }
+        
+        .form-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+        }
+        
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .btn-buy {
+            background: linear-gradient(135deg, #00ff88, #00cc6a);
+            color: #000;
+        }
+        
+        .btn-sell {
+            background: linear-gradient(135deg, #ff4444, #cc0000);
+            color: #fff;
+        }
+        
+        .btn-close {
+            background: linear-gradient(135deg, #888, #666);
+            color: #fff;
+        }
+        
+        .btn-warning {
+            background: linear-gradient(135deg, #ffaa00, #ff8800);
+            color: #000;
+        }
+        
+        .btn-info {
+            background: linear-gradient(135deg, #00d4ff, #0099cc);
+            color: #000;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.3);
+        }
+        
+        /* Symbol chips */
+        .symbol-chip {
+            display: inline-block;
+            padding: 8px 16px;
+            background: rgba(0, 212, 255, 0.2);
+            border: 1px solid rgba(0, 212, 255, 0.4);
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        
+        .symbol-chip:hover {
+            background: rgba(0, 212, 255, 0.4);
+            transform: scale(1.05);
+        }
+        
+        .symbol-chip.active {
+            background: #00d4ff;
+            color: #000;
+            font-weight: bold;
+        }
+        
+        .symbol-chip.removable::after {
+            content: ' ×';
+            color: #ff4444;
+            font-weight: bold;
+        }
+        
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .btn-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-top: 15px;
+        }
+        
+        /* Positions Table */
+        .positions-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        
+        .positions-table th,
+        .positions-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .positions-table th {
+            background: rgba(0, 0, 0, 0.3);
+            font-size: 12px;
+            text-transform: uppercase;
+            color: #888;
+        }
+        
+        .positions-table tr:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+        
+        .profit-positive { color: #00ff88; }
+        .profit-negative { color: #ff4444; }
+        
+        /* Money Management Panel */
+        .mm-panel {
+            grid-column: span 2;
+        }
+        
+        .mm-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 20px;
+        }
+        
+        .mm-stat {
+            background: rgba(0, 0, 0, 0.2);
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        
+        .mm-stat .value {
+            font-size: 28px;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        
+        .mm-stat .label {
+            font-size: 12px;
+            color: #888;
+        }
+        
+        /* Slider */
+        .slider-container {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        .slider {
+            flex: 1;
+            -webkit-appearance: none;
+            height: 8px;
+            border-radius: 4px;
+            background: rgba(255, 255, 255, 0.1);
+            outline: none;
+        }
+        
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #00d4ff;
+            cursor: pointer;
+        }
+        
+        .slider-value {
+            min-width: 60px;
+            text-align: right;
+            font-weight: bold;
+        }
+        
+        /* Toggle Switch */
+        .toggle-container {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 0;
+        }
+        
+        .toggle {
+            position: relative;
+            width: 50px;
+            height: 26px;
+        }
+        
+        .toggle input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 26px;
+            transition: 0.3s;
+        }
+        
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 20px;
+            width: 20px;
+            left: 3px;
+            bottom: 3px;
+            background: #fff;
+            border-radius: 50%;
+            transition: 0.3s;
+        }
+        
+        .toggle input:checked + .toggle-slider {
+            background: #00d4ff;
+        }
+        
+        .toggle input:checked + .toggle-slider:before {
+            transform: translateX(24px);
+        }
+        
+        /* Signal History */
+        .signal-history {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        
+        .signal-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        
+        .signal-item:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+        
+        .trend-badge {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        
+        .badge-bullish {
+            background: rgba(0, 255, 136, 0.2);
+            color: #00ff88;
+        }
+        
+        .badge-bearish {
+            background: rgba(255, 68, 68, 0.2);
+            color: #ff4444;
+        }
+        
+        .badge-momentum {
+            background: linear-gradient(90deg, #7b2cbf, #00d4ff);
+            color: #fff;
+        }
+        
+        /* Toast notifications */
+        .toast-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+        
+        .toast {
+            background: rgba(0, 0, 0, 0.9);
+            padding: 15px 25px;
+            border-radius: 10px;
+            margin-bottom: 10px;
+            border-left: 4px solid #00d4ff;
+            animation: slideIn 0.3s ease;
+        }
+        
+        .toast.success { border-left-color: #00ff88; }
+        .toast.error { border-left-color: #ff4444; }
+        .toast.warning { border-left-color: #ffaa00; }
+        
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+        }
+        
+        .stat-item {
+            text-align: center;
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 10px;
+        }
+        
+        .stat-item .number {
+            font-size: 36px;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        
+        .stat-item .label {
+            font-size: 12px;
+            color: #888;
+        }
+        
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.2); }
+        ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.2); border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <h1>💎 Crystal Heikin Ashi - Trading Dashboard</h1>
+        <div class="status-indicator">
+            <span id="header-balance">Balance: --</span>
+            <span id="status-text">Déconnecté</span>
+            <div class="status-dot" id="status-dot"></div>
+        </div>
+    </header>
+    
+    <div class="toast-container" id="toast-container"></div>
+    
+    <!-- Tabs Navigation -->
+    <div class="tabs">
+        <div class="tab active" data-tab="signals">📊 Signaux</div>
+        <div class="tab" data-tab="trading">⚡ Trading</div>
+        <div class="tab" data-tab="positions">📈 Positions</div>
+        <div class="tab" data-tab="settings">⚙️ Money Management</div>
+    </div>
+    
+    <!-- Tab: Signaux -->
+    <div class="tab-content active" id="tab-signals">
+        <div class="container">
+            <!-- MULTI-SYMBOLES : Vue d'ensemble -->
+            <div class="card" style="grid-column: 1 / -1;">
+                <div class="card-title">🌍 Multi-Symboles - Vue d'ensemble</div>
+                <div style="margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <span id="symbols-count">0</span> symboles surveillés
+                    </div>
+                    <div style="display: flex; gap: 10px;">
+                        <select id="filter-trend" onchange="filterSymbols()" style="padding: 5px 10px; background: #1a1a2e; color: #fff; border: 1px solid #333; border-radius: 4px;">
+                            <option value="all">Tous</option>
+                            <option value="STRONG_BUY">🔥 STRONG BUY</option>
+                            <option value="BUY">📈 BUY</option>
+                            <option value="SELL">📉 SELL</option>
+                            <option value="STRONG_SELL">💀 STRONG SELL</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="multi-symbols-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px;">
+                    <div style="text-align: center; color: #666; padding: 20px;">En attente des données MT5...</div>
+                </div>
+            </div>
+            
+            <!-- Alertes Intelligentes -->
+            <div class="card" style="grid-column: 1 / -1; display: none;" id="alerts-card">
+                <div class="card-title">🚨 Alertes Intelligentes</div>
+                <div id="alerts-container" style="max-height: 150px; overflow-y: auto;"></div>
+            </div>
+            
+            <!-- Sélecteur de symbole à afficher en détail -->
+            <div class="card" style="grid-column: 1 / -1;">
+                <div style="display: flex; align-items: center; gap: 15px;">
+                    <label style="white-space: nowrap;">📊 Détails pour :</label>
+                    <select id="detail-symbol-select" onchange="selectDetailSymbol()" style="flex: 1; padding: 10px; background: #1a1a2e; color: #00d4ff; border: 1px solid #00d4ff; border-radius: 5px; font-size: 16px;">
+                        <option value="">-- Sélectionner un symbole --</option>
+                    </select>
+                </div>
+            </div>
+            
+            <!-- Signal actuel (détail du symbole sélectionné) -->
+            <div class="card signal-card">
+                <div class="card-title">📊 Signal Actuel - Crystal Heikin Ashi</div>
+                <div class="current-signal">
+                    <div class="signal-value">
+                        <div class="label">Symbole</div>
+                        <div class="value" id="current-symbol">--</div>
+                    </div>
+                    <div class="signal-value">
+                        <div class="label">Tendance</div>
+                        <div class="value" id="current-trend">--</div>
+                    </div>
+                    <div class="signal-value" id="momentum-box">
+                        <div class="label">Momentum Shift</div>
+                        <div class="value" id="current-momentum">Non</div>
+                    </div>
+                    <div class="signal-value">
+                        <div class="label">Prix (Bid/Ask)</div>
+                        <div class="value" id="current-price">--</div>
+                    </div>
+                </div>
+                <div style="margin-top: 20px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px;">
+                    <div class="signal-value">
+                        <div class="label">HA Open</div>
+                        <div class="value" id="ha-open" style="font-size: 16px;">--</div>
+                    </div>
+                    <div class="signal-value">
+                        <div class="label">HA High</div>
+                        <div class="value" id="ha-high" style="font-size: 16px;">--</div>
+                    </div>
+                    <div class="signal-value">
+                        <div class="label">HA Low</div>
+                        <div class="value" id="ha-low" style="font-size: 16px;">--</div>
+                    </div>
+                    <div class="signal-value">
+                        <div class="label">HA Close</div>
+                        <div class="value" id="ha-close" style="font-size: 16px;">--</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- CONFLUENCE - Score et Signal Final -->
+            <div class="card" style="grid-column: span 2;">
+                <div class="card-title">🎯 Score de Confluence</div>
+                <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 20px;">
+                    <!-- Score visuel -->
+                    <div style="text-align: center;">
+                        <div id="confluence-signal" style="font-size: 28px; font-weight: bold; padding: 20px; border-radius: 10px; background: rgba(0,0,0,0.3);">
+                            --
+                        </div>
+                        <div style="margin-top: 15px;">
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                                <span style="color: #00ff88;">BULL</span>
+                                <span id="bullish-percent" style="color: #00ff88;">0%</span>
+                            </div>
+                            <div style="background: #333; border-radius: 5px; height: 20px; overflow: hidden;">
+                                <div id="bullish-bar" style="height: 100%; background: linear-gradient(90deg, #00ff88, #00d4ff); width: 0%; transition: width 0.5s;"></div>
+                            </div>
+                        </div>
+                        <div style="margin-top: 10px;">
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                                <span style="color: #ff4444;">BEAR</span>
+                                <span id="bearish-percent" style="color: #ff4444;">0%</span>
+                            </div>
+                            <div style="background: #333; border-radius: 5px; height: 20px; overflow: hidden;">
+                                <div id="bearish-bar" style="height: 100%; background: linear-gradient(90deg, #ff4444, #ff6b6b); width: 0%; transition: width 0.5s;"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Détail des indicateurs -->
+                    <div>
+                        <div style="font-size: 12px; color: #888; margin-bottom: 10px;">Indicateurs analysés (<span id="indicators-count">0</span>)</div>
+                        <div id="indicators-detail" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;">
+                            <!-- Rempli dynamiquement -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Critical Zones & Supply Demand -->
+            <div class="card">
+                <div class="card-title">🎯 Zones Critiques</div>
+                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px;">
+                    <div class="signal-value" style="border-left: 3px solid #ff4444;">
+                        <div class="label">Résistance</div>
+                        <div class="value trend-bearish" id="zone-resistance" style="font-size: 18px;">--</div>
+                    </div>
+                    <div class="signal-value" style="border-left: 3px solid #00ff88;">
+                        <div class="label">Support</div>
+                        <div class="value trend-bullish" id="zone-support" style="font-size: 18px;">--</div>
+                    </div>
+                    <div class="signal-value" style="border-left: 3px solid #ff6b6b;">
+                        <div class="label">Zone Supply</div>
+                        <div class="value" id="zone-supply" style="font-size: 18px; color: #ff6b6b;">--</div>
+                    </div>
+                    <div class="signal-value" style="border-left: 3px solid #4ecdc4;">
+                        <div class="label">Zone Demand</div>
+                        <div class="value" id="zone-demand" style="font-size: 18px; color: #4ecdc4;">--</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- VWAP -->
+            <div class="card">
+                <div class="card-title">📈 VWAP & Volume Profile</div>
+                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px;">
+                    <div class="signal-value">
+                        <div class="label">VWAP</div>
+                        <div class="value" id="vwap-value" style="font-size: 20px; color: #00d4ff;">--</div>
+                    </div>
+                    <div class="signal-value">
+                        <div class="label">POC (Point of Control)</div>
+                        <div class="value" id="poc-value" style="font-size: 20px; color: #ffd700;">--</div>
+                    </div>
+                    <div class="signal-value">
+                        <div class="label">VWAP Upper Band</div>
+                        <div class="value" id="vwap-upper" style="font-size: 16px;">--</div>
+                    </div>
+                    <div class="signal-value">
+                        <div class="label">VWAP Lower Band</div>
+                        <div class="value" id="vwap-lower" style="font-size: 16px;">--</div>
+                    </div>
+                </div>
+                <div style="margin-top: 15px; text-align: center;">
+                    <span class="trend-badge" id="price-position" style="padding: 8px 20px; font-size: 14px;">
+                        Position: --
+                    </span>
+                </div>
+            </div>
+            
+            <!-- Harmonic Pattern -->
+            <div class="card">
+                <div class="card-title">🦋 Harmonic Pattern</div>
+                <div class="signal-value" style="padding: 30px;" id="harmonic-box">
+                    <div class="label">Pattern Détecté</div>
+                    <div class="value" id="harmonic-pattern" style="font-size: 24px;">AUCUN</div>
+                </div>
+            </div>
+            
+            <!-- Super Trend -->
+            <div class="card">
+                <div class="card-title">📊 LT Super Trend</div>
+                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px;">
+                    <div class="signal-value" id="supertrend-box">
+                        <div class="label">Direction</div>
+                        <div class="value" id="supertrend-direction" style="font-size: 22px;">--</div>
+                    </div>
+                    <div class="signal-value">
+                        <div class="label">Niveau Actuel</div>
+                        <div class="value" id="supertrend-level" style="font-size: 18px;">--</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Fibo Expansion -->
+            <div class="card">
+                <div class="card-title">📐 Auto Fibo MT5</div>
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px;">
+                    <div class="signal-value" style="border-left: 3px solid #ffd700;">
+                        <div class="label">Fibo 61.8%</div>
+                        <div class="value" id="fibo-level1" style="font-size: 16px; color: #ffd700;">--</div>
+                    </div>
+                    <div class="signal-value" style="border-left: 3px solid #ff8c00;">
+                        <div class="label">Fibo 100%</div>
+                        <div class="value" id="fibo-level2" style="font-size: 16px; color: #ff8c00;">--</div>
+                    </div>
+                    <div class="signal-value" style="border-left: 3px solid #ff4500;">
+                        <div class="label">Fibo 161.8%</div>
+                        <div class="value" id="fibo-level3" style="font-size: 16px; color: #ff4500;">--</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Candlestick Patterns & Bollinger RSI -->
+            <div class="card">
+                <div class="card-title">🕯️ Patterns & Signaux</div>
+                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px;">
+                    <div class="signal-value">
+                        <div class="label">Candle Pattern</div>
+                        <div class="value" id="candle-pattern" style="font-size: 18px;">--</div>
+                    </div>
+                    <div class="signal-value">
+                        <div class="label">Bollinger RSI</div>
+                        <div class="value" id="bollinger-direction" style="font-size: 18px;">--</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- FVG (Fair Value Gap) -->
+            <div class="card">
+                <div class="card-title">📊 FVG (Fair Value Gap)</div>
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px;">
+                    <div class="signal-value">
+                        <div class="label">Type</div>
+                        <div class="value" id="fvg-type" style="font-size: 18px;">--</div>
+                    </div>
+                    <div class="signal-value" style="border-left: 3px solid #00ff88;">
+                        <div class="label">FVG High</div>
+                        <div class="value" id="fvg-high" style="font-size: 16px;">--</div>
+                    </div>
+                    <div class="signal-value" style="border-left: 3px solid #ff4444;">
+                        <div class="label">FVG Low</div>
+                        <div class="value" id="fvg-low" style="font-size: 16px;">--</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- MACD Intraday -->
+            <div class="card">
+                <div class="card-title">📈 MACD Intraday Trend</div>
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px;">
+                    <div class="signal-value">
+                        <div class="label">Tendance</div>
+                        <div class="value" id="macd-trend" style="font-size: 20px;">--</div>
+                    </div>
+                    <div class="signal-value">
+                        <div class="label">MACD Main</div>
+                        <div class="value" id="macd-main" style="font-size: 14px;">--</div>
+                    </div>
+                    <div class="signal-value">
+                        <div class="label">MACD Signal</div>
+                        <div class="value" id="macd-signal" style="font-size: 14px;">--</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Pro Support Resistance -->
+            <div class="card">
+                <div class="card-title">🎯 Pro Support/Resistance</div>
+                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px;">
+                    <div class="signal-value" style="border-left: 3px solid #ff4444;">
+                        <div class="label">Pro Resistance</div>
+                        <div class="value trend-bearish" id="pro-resistance" style="font-size: 18px;">--</div>
+                    </div>
+                    <div class="signal-value" style="border-left: 3px solid #00ff88;">
+                        <div class="label">Pro Support</div>
+                        <div class="value trend-bullish" id="pro-support" style="font-size: 18px;">--</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Statistiques -->
+            <div class="card">
+                <div class="card-title">📈 Statistiques 24h</div>
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <div class="number trend-bullish" id="stat-bullish">0</div>
+                        <div class="label">Bullish</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="number trend-bearish" id="stat-bearish">0</div>
+                        <div class="label">Bearish</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="number" style="color: #7b2cbf;" id="stat-momentum">0</div>
+                        <div class="label">Momentum Shifts</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Historique des signaux -->
+            <div class="card">
+                <div class="card-title">📋 Historique des Signaux</div>
+                <div class="signal-history" id="signal-history">
+                    <div class="signal-item" style="color: #666; justify-content: center;">
+                        En attente des signaux MT5...
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Tab: Trading -->
+    <div class="tab-content" id="tab-trading">
+        <!-- Ligne 1 : Sélection + Infos compte -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; padding: 20px;">
+            <!-- Sélection Symbole et Timeframe -->
+            <div class="card">
+                <div class="card-title">🎯 Sélection Actif & Timeframe</div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                    <div>
+                        <label class="label">Symbole</label>
+                        <select id="symbol-select" class="input" onchange="onSymbolChange()" style="width: 100%; padding: 10px; font-size: 14px;">
+                            <optgroup label="Forex Majeurs">
+                                <option value="EURUSD" selected>EURUSD</option>
+                                <option value="GBPUSD">GBPUSD</option>
+                                <option value="USDJPY">USDJPY</option>
+                                <option value="USDCHF">USDCHF</option>
+                                <option value="AUDUSD">AUDUSD</option>
+                                <option value="USDCAD">USDCAD</option>
+                                <option value="NZDUSD">NZDUSD</option>
+                            </optgroup>
+                            <optgroup label="Forex Cross">
+                                <option value="EURGBP">EURGBP</option>
+                                <option value="EURJPY">EURJPY</option>
+                                <option value="GBPJPY">GBPJPY</option>
+                                <option value="AUDNZD">AUDNZD</option>
+                            </optgroup>
+                            <optgroup label="Métaux">
+                                <option value="XAUUSD">XAUUSD (Gold)</option>
+                                <option value="XAGUSD">XAGUSD (Silver)</option>
+                            </optgroup>
+                            <optgroup label="Crypto">
+                                <option value="BTCUSD">BTCUSD</option>
+                                <option value="ETHUSD">ETHUSD</option>
+                            </optgroup>
+                            <optgroup label="Indices">
+                                <option value="US30">US30 (Dow Jones)</option>
+                                <option value="US500">US500 (S&P 500)</option>
+                                <option value="US100">US100 (Nasdaq)</option>
+                                <option value="GER40">GER40 (DAX)</option>
+                                <option value="UK100">UK100 (FTSE)</option>
+                            </optgroup>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="label">Timeframe</label>
+                        <select id="timeframe-select" class="input" style="width: 100%; padding: 10px; font-size: 14px;">
+                            <option value="M1">M1 - 1 Minute</option>
+                            <option value="M5">M5 - 5 Minutes</option>
+                            <option value="M15" selected>M15 - 15 Minutes</option>
+                            <option value="M30">M30 - 30 Minutes</option>
+                            <option value="H1">H1 - 1 Heure</option>
+                            <option value="H4">H4 - 4 Heures</option>
+                            <option value="D1">D1 - Journalier</option>
+                            <option value="W1">W1 - Hebdomadaire</option>
+                            <option value="MN1">MN1 - Mensuel</option>
+                        </select>
+                    </div>
+                </div>
+                <div style="margin-top: 10px; display: flex; gap: 10px;">
+                    <input type="text" id="custom-symbol" class="input" placeholder="Symbole personnalisé..." style="flex: 1; padding: 8px;">
+                    <button class="btn" onclick="addCustomSymbol()" style="white-space: nowrap; padding: 8px 15px;">➕ Ajouter</button>
+                </div>
+                <!-- Symboles favoris -->
+                <div style="margin-top: 15px;">
+                    <label class="label">⭐ Favoris</label>
+                    <div id="favorite-symbols" style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px;"></div>
+                </div>
+            </div>
+            
+            <!-- Infos Compte -->
+            <div class="card">
+                <div class="card-title">💰 Informations Compte</div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                    <div style="text-align: center; padding: 15px; background: rgba(0,255,136,0.1); border-radius: 10px;">
+                        <div style="font-size: 12px; color: #888;">Balance</div>
+                        <div id="account-balance" style="font-size: 22px; font-weight: bold; color: #00ff88;">--</div>
+                    </div>
+                    <div style="text-align: center; padding: 15px; background: rgba(0,212,255,0.1); border-radius: 10px;">
+                        <div style="font-size: 12px; color: #888;">Equity</div>
+                        <div id="account-equity" style="font-size: 22px; font-weight: bold; color: #00d4ff;">--</div>
+                    </div>
+                    <div style="text-align: center; padding: 15px; background: rgba(255,165,0,0.1); border-radius: 10px;">
+                        <div style="font-size: 12px; color: #888;">Marge Utilisée</div>
+                        <div id="account-margin" style="font-size: 18px; font-weight: bold; color: #ffa500;">--</div>
+                    </div>
+                    <div style="text-align: center; padding: 15px; background: rgba(0,0,0,0.2); border-radius: 10px;">
+                        <div style="font-size: 12px; color: #888;">Marge Libre</div>
+                        <div id="account-free-margin" style="font-size: 18px; font-weight: bold;">--</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Ligne 2 : Trading Rapide + Options -->
+        <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 20px; padding: 0 20px 20px 20px;">
+            <!-- Panel de trading rapide -->
+            <div class="card">
+                <div class="card-title">⚡ Trading Rapide</div>
+                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 15px;">
+                    <div>
+                        <label class="label">Symbole</label>
+                        <input type="text" id="trade-symbol" value="EURUSD" readonly style="width: 100%; padding: 10px; background: rgba(0,212,255,0.2); font-weight: bold; border: none; border-radius: 5px; color: #00d4ff; text-align: center;" />
+                    </div>
+                    <div>
+                        <label class="label">Mode calcul</label>
+                        <select id="lot-mode" onchange="updateLotCalculation()" style="width: 100%; padding: 10px; background: #1a1a2e; color: #fff; border: 1px solid #333; border-radius: 5px;">
+                            <option value="fixed">Lot Fixe</option>
+                            <option value="risk">% Risque</option>
+                            <option value="balance">% Balance</option>
+                        </select>
+                    </div>
+                    <div id="lot-fixed-group">
+                        <label class="label">Volume (Lots)</label>
+                        <input type="number" id="trade-volume" value="0.01" step="0.01" min="0.01" style="width: 100%; padding: 10px; background: #1a1a2e; color: #fff; border: 1px solid #333; border-radius: 5px;" />
+                    </div>
+                    <div id="risk-percent-group" style="display:none;">
+                        <label class="label">Risque %</label>
+                        <input type="number" id="risk-percent" value="1" step="0.1" min="0.1" max="10" style="width: 100%; padding: 10px; background: #1a1a2e; color: #fff; border: 1px solid #333; border-radius: 5px;" />
+                    </div>
+                    <div>
+                        <label class="label">Lot Calculé</label>
+                        <input type="text" id="calculated-lot" value="0.01" readonly style="width: 100%; padding: 10px; background: rgba(0,0,0,0.3); color: #ffd700; border: none; border-radius: 5px; text-align: center; font-weight: bold;" />
+                    </div>
+                </div>
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: 20px;">
+                    <div>
+                        <label class="label">Stop Loss (pips)</label>
+                        <input type="number" id="trade-sl" value="50" style="width: 100%; padding: 10px; background: #1a1a2e; color: #ff4444; border: 1px solid #ff4444; border-radius: 5px;" />
+                    </div>
+                    <div>
+                        <label class="label">Take Profit (pips)</label>
+                        <input type="number" id="trade-tp" value="100" style="width: 100%; padding: 10px; background: #1a1a2e; color: #00ff88; border: 1px solid #00ff88; border-radius: 5px;" />
+                    </div>
+                    <div>
+                        <label class="label">Ratio R:R</label>
+                        <input type="text" id="trade-rr" value="1:2" readonly style="width: 100%; padding: 10px; background: rgba(0,0,0,0.3); color: #fff; border: none; border-radius: 5px; text-align: center;" />
+                    </div>
+                </div>
+                <div style="display: flex; gap: 20px; justify-content: center;">
+                    <button class="btn btn-buy" onclick="sendTrade('BUY')" style="padding: 15px 60px; font-size: 18px; font-weight: bold;">
+                        📈 BUY
+                    </button>
+                    <button class="btn btn-sell" onclick="sendTrade('SELL')" style="padding: 15px 60px; font-size: 18px; font-weight: bold;">
+                        📉 SELL
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Options avancées -->
+            <div class="card">
+                <div class="card-title">🎯 Options Avancées</div>
+                
+                <div class="toggle-container">
+                    <span>Trailing Stop</span>
+                    <label class="toggle">
+                        <input type="checkbox" id="enable-trailing" />
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+                <div class="form-group" id="trailing-group" style="display:none;">
+                    <label>Distance (pips)</label>
+                    <input type="number" id="trailing-distance" value="20" style="width: 100%; padding: 8px; background: #1a1a2e; color: #fff; border: 1px solid #333; border-radius: 5px;" />
+                </div>
+                
+                <div class="toggle-container">
+                    <span>Break-Even Auto</span>
+                    <label class="toggle">
+                        <input type="checkbox" id="enable-breakeven" />
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+                <div class="form-group" id="breakeven-group" style="display:none;">
+                    <label>Déclencher à (pips)</label>
+                    <input type="number" id="breakeven-trigger" value="30" style="width: 100%; padding: 8px; background: #1a1a2e; color: #fff; border: 1px solid #333; border-radius: 5px;" />
+                </div>
+                
+                <div class="toggle-container">
+                    <span>TP Partiel</span>
+                    <label class="toggle">
+                        <input type="checkbox" id="enable-partial" />
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+                
+                <div class="toggle-container">
+                    <span>Auto-Trade Momentum</span>
+                    <label class="toggle">
+                        <input type="checkbox" id="enable-auto-momentum" />
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Tab: Positions -->
+    <div class="tab-content" id="tab-positions">
+        <div class="container">
+            <!-- Trades en attente -->
+            <div class="card">
+                <div class="card-title">⏳ Commandes en Attente (vers MT5)</div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <div>
+                        <span id="pending-count">0</span> commandes en attente
+                    </div>
+                    <div>
+                        <button class="btn btn-warning" onclick="clearAllPending()">🗑️ Tout annuler</button>
+                        <button class="btn btn-info" onclick="refreshPendingTrades()">🔄 Actualiser</button>
+                    </div>
+                </div>
+                <div id="pending-trades-list" style="max-height: 200px; overflow-y: auto;">
+                    <div style="text-align: center; color: #666; padding: 20px;">Aucune commande en attente</div>
+                </div>
+            </div>
+            
+            <div class="card signal-card">
+                <div class="card-title">📊 Positions Ouvertes</div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <div>
+                        <span id="total-positions">0</span> positions | 
+                        P&L: <span id="total-pnl" class="profit-positive">$0.00</span>
+                    </div>
+                    <div>
+                        <button class="btn btn-warning" onclick="closeAllPositions()">Fermer Tout</button>
+                        <button class="btn btn-info" onclick="refreshPositions()">🔄 Actualiser</button>
+                    </div>
+                </div>
+                <table class="positions-table">
+                    <thead>
+                        <tr>
+                            <th>Ticket</th>
+                            <th>Symbole</th>
+                            <th>Type</th>
+                            <th>Volume</th>
+                            <th>Prix Ouverture</th>
+                            <th>Prix Actuel</th>
+                            <th>SL</th>
+                            <th>TP</th>
+                            <th>P&L</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="positions-body">
+                        <tr>
+                            <td colspan="10" style="text-align: center; color: #666;">
+                                Aucune position ouverte
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- Historique des trades -->
+            <div class="card signal-card">
+                <div class="card-title">📜 Historique des Trades</div>
+                <table class="positions-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Symbole</th>
+                            <th>Type</th>
+                            <th>Volume</th>
+                            <th>Prix Entrée</th>
+                            <th>Prix Sortie</th>
+                            <th>P&L</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="history-body">
+                        <tr>
+                            <td colspan="8" style="text-align: center; color: #666;">
+                                Aucun historique
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Tab: Money Management Settings -->
+    <div class="tab-content" id="tab-settings">
+        <div class="container">
+            <div class="card signal-card">
+                <div class="card-title">💰 Configuration Money Management</div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Risque Maximum par Trade (%)</label>
+                        <div class="slider-container">
+                            <input type="range" class="slider" id="max-risk-slider" min="0.5" max="5" step="0.1" value="1" 
+                                   oninput="updateSliderValue('max-risk')">
+                            <span class="slider-value" id="max-risk-value">1%</span>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Perte Journalière Max (%)</label>
+                        <div class="slider-container">
+                            <input type="range" class="slider" id="daily-loss-slider" min="1" max="10" step="0.5" value="3"
+                                   oninput="updateSliderValue('daily-loss')">
+                            <span class="slider-value" id="daily-loss-value">3%</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Lot Minimum</label>
+                        <input type="number" id="min-lot" value="0.01" step="0.01" min="0.01" />
+                    </div>
+                    <div class="form-group">
+                        <label>Lot Maximum</label>
+                        <input type="number" id="max-lot" value="1.00" step="0.01" min="0.01" />
+                    </div>
+                    <div class="form-group">
+                        <label>Positions Max Simultanées</label>
+                        <input type="number" id="max-positions" value="3" min="1" max="10" />
+                    </div>
+                    <div class="form-group">
+                        <label>Ratio R:R Minimum</label>
+                        <select id="min-rr">
+                            <option value="1">1:1</option>
+                            <option value="1.5">1:1.5</option>
+                            <option value="2" selected>1:2</option>
+                            <option value="3">1:3</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="btn-actions">
+                    <button class="btn btn-info" onclick="saveMMSettings()">💾 Sauvegarder</button>
+                    <button class="btn btn-close" onclick="resetMMSettings()">🔄 Réinitialiser</button>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-title">🛡️ Protection du Capital</div>
+                
+                <div class="toggle-container">
+                    <span>Bloquer trading si perte journalière max atteinte</span>
+                    <label class="toggle">
+                        <input type="checkbox" id="block-on-daily-loss" checked />
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+                
+                <div class="toggle-container">
+                    <span>Réduire lot après 2 pertes consécutives</span>
+                    <label class="toggle">
+                        <input type="checkbox" id="reduce-after-loss" />
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+                
+                <div class="toggle-container">
+                    <span>Augmenter lot après 3 gains consécutifs</span>
+                    <label class="toggle">
+                        <input type="checkbox" id="increase-after-win" />
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+                
+                <div class="toggle-container">
+                    <span>Notifier sur Telegram</span>
+                    <label class="toggle">
+                        <input type="checkbox" id="telegram-notify" />
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+            </div>
+            
+            <!-- Statistiques MM -->
+            <div class="card">
+                <div class="card-title">📊 Performance</div>
+                <div class="mm-grid" style="grid-template-columns: repeat(2, 1fr);">
+                    <div class="mm-stat">
+                        <div class="value profit-positive" id="mm-win-rate">--%</div>
+                        <div class="label">Win Rate</div>
+                    </div>
+                    <div class="mm-stat">
+                        <div class="value" id="mm-avg-rr">--</div>
+                        <div class="label">R:R Moyen</div>
+                    </div>
+                    <div class="mm-stat">
+                        <div class="value profit-positive" id="mm-total-profit">$0</div>
+                        <div class="label">Profit Total</div>
+                    </div>
+                    <div class="mm-stat">
+                        <div class="value" id="mm-trades-today">0</div>
+                        <div class="label">Trades Aujourd'hui</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // ========================================
+        // WebSocket & Connexion
+        // ========================================
+        const socket = io();
+        let isConnected = false;
+        let currentSymbol = 'USDCHF';
+        let accountInfo = { balance: 10000, equity: 10000, margin: 0, freeMargin: 10000 };
+        let mmSettings = loadMMSettings();
+        
+        // Symboles favoris par défaut
+        let favoriteSymbols = JSON.parse(localStorage.getItem('favoriteSymbols')) || 
+            ['EURUSD', 'GBPUSD', 'USDJPY', 'XAUUSD', 'BTCUSD', 'US30'];
+        
+        // Initialiser les favoris au chargement
+        document.addEventListener('DOMContentLoaded', () => {
+            renderFavoriteSymbols();
+            updateSelectedSymbol();
+        });
+        
+        // Rendre les symboles favoris
+        function renderFavoriteSymbols() {
+            const container = document.getElementById('favorite-symbols');
+            if (!container) return;
+            
+            container.innerHTML = favoriteSymbols.map(sym => 
+                `<span class="symbol-chip ${sym === currentSymbol ? 'active' : ''}" 
+                       onclick="selectSymbol('${sym}')" 
+                       oncontextmenu="removeFavorite('${sym}'); return false;">
+                    ${sym}
+                </span>`
+            ).join('');
+        }
+        
+        // Sélectionner un symbole
+        function selectSymbol(symbol) {
+            currentSymbol = symbol;
+            document.getElementById('symbol-select').value = symbol;
+            document.getElementById('trade-symbol').value = symbol;
+            document.getElementById('selected-symbol-display').textContent = symbol;
+            
+            // Mettre à jour les chips actifs
+            document.querySelectorAll('.symbol-chip').forEach(chip => {
+                chip.classList.toggle('active', chip.textContent.trim() === symbol);
+            });
+            
+            showToast(`Symbole sélectionné: ${symbol}`, 'success');
+        }
+        
+        // Quand le select change
+        function onSymbolChange() {
+            const symbol = document.getElementById('symbol-select').value;
+            selectSymbol(symbol);
+        }
+        
+        // Ajouter un symbole personnalisé
+        function addCustomSymbol() {
+            const input = document.getElementById('custom-symbol');
+            const symbol = input.value.toUpperCase().trim();
+            
+            if (!symbol) {
+                showToast('Entrez un symbole', 'error');
+                return;
+            }
+            
+            // Ajouter au select
+            const select = document.getElementById('symbol-select');
+            const exists = Array.from(select.options).some(opt => opt.value === symbol);
+            
+            if (!exists) {
+                const option = document.createElement('option');
+                option.value = symbol;
+                option.text = symbol + ' (personnalisé)';
+                select.appendChild(option);
+            }
+            
+            // Ajouter aux favoris
+            if (!favoriteSymbols.includes(symbol)) {
+                favoriteSymbols.push(symbol);
+                localStorage.setItem('favoriteSymbols', JSON.stringify(favoriteSymbols));
+                renderFavoriteSymbols();
+            }
+            
+            // Sélectionner
+            select.value = symbol;
+            selectSymbol(symbol);
+            input.value = '';
+        }
+        
+        // Supprimer un favori (clic droit)
+        function removeFavorite(symbol) {
+            favoriteSymbols = favoriteSymbols.filter(s => s !== symbol);
+            localStorage.setItem('favoriteSymbols', JSON.stringify(favoriteSymbols));
+            renderFavoriteSymbols();
+            showToast(`${symbol} retiré des favoris`, 'warning');
+        }
+        
+        // Mettre à jour l'affichage du symbole sélectionné
+        function updateSelectedSymbol() {
+            document.getElementById('trade-symbol').value = currentSymbol;
+            if (document.getElementById('selected-symbol-display')) {
+                document.getElementById('selected-symbol-display').textContent = currentSymbol;
+            }
+        }
+        
+        
+        // ========================================
+        // MULTI-SYMBOLES : Stockage des signaux
+        // ========================================
+        const allSymbolsSignals = {};  // {symbol: signal}
+        let selectedDetailSymbol = '';  // Symbole sélectionné pour les détails
+        
+        socket.on('connect', () => {
+            isConnected = true;
+            document.getElementById('status-dot').classList.add('connected');
+            document.getElementById('status-text').textContent = 'Connecté';
+            console.log('[WS] Connecté');
+        });
+        
+        socket.on('disconnect', () => {
+            isConnected = false;
+            document.getElementById('status-dot').classList.remove('connected');
+            document.getElementById('status-text').textContent = 'Déconnecté';
+        });
+        
+        socket.on('new_signal', (data) => {
+            console.log('[SIGNAL] Reçu:', data);
+            
+            // Toujours mettre à jour le signal pour ce symbole
+            const sym = data.symbol || 'UNKNOWN';
+            console.log('[SIGNAL] Symbole extrait:', sym);
+            
+            if (sym && sym !== 'UNKNOWN') {
+                allSymbolsSignals[sym] = data;
+                const count = Object.keys(allSymbolsSignals).length;
+                console.log('[SIGNAL] Stocké dans allSymbolsSignals. Total:', count);
+                
+                // Mettre à jour le compteur immédiatement
+                const countEl = document.getElementById('symbols-count');
+                if (countEl) {
+                    countEl.textContent = count;
+                    console.log('[SIGNAL] Compteur mis à jour:', count);
+                }
+                
+                // Mettre à jour la grille multi-symboles
+                try {
+                    updateMultiSymbolsGrid();
+                    console.log('[SIGNAL] Grille mise à jour OK');
+                } catch (e) {
+                    console.error('[ERROR] updateMultiSymbolsGrid:', e);
+                }
+                
+                // Si aucun symbole sélectionné, prendre celui-ci
+                if (!selectedDetailSymbol) {
+                    selectedDetailSymbol = sym;
+                }
+                
+                // Si c'est le symbole sélectionné, mettre à jour les détails
+                if (selectedDetailSymbol === sym) {
+                    updateCurrentSignal(data);
+                }
+                
+                // Mettre à jour la liste déroulante
+                updateDetailSymbolSelect();
+            } else {
+                console.log('[SIGNAL] Symbole ignoré (UNKNOWN)');
+                // Même si symbole inconnu, mettre à jour l'affichage
+                updateCurrentSignal(data);
+            }
+            
+            addToHistory(data);
+            loadStats();
+            
+            // Alertes intelligentes
+            addSmartAlert(data);
+            
+            // Auto-trade sur momentum shift
+            if (data.momentum_shift && document.getElementById('enable-auto-momentum') && 
+                document.getElementById('enable-auto-momentum').checked) {
+                const action = data.trend === 'BULLISH' ? 'BUY' : 'SELL';
+                showToast(`Auto-Trade: ${action} sur Momentum Shift`, 'warning');
+                sendTrade(action);
+            }
+        });
+        
+        // Mettre à jour la grille multi-symboles
+        function updateMultiSymbolsGrid() {
+            const grid = document.getElementById('multi-symbols-grid');
+            const filterEl = document.getElementById('filter-trend');
+            const countEl = document.getElementById('symbols-count');
+            
+            if (!grid) {
+                console.error('[ERROR] Element multi-symbols-grid non trouvé');
+                return;
+            }
+            
+            const filter = filterEl ? filterEl.value : 'all';
+            const symbols = Object.keys(allSymbolsSignals);
+            
+            if (countEl) countEl.textContent = symbols.length;
+            
+            if (symbols.length === 0) {
+                grid.innerHTML = '<div style="text-align: center; color: #666; padding: 20px; grid-column: 1/-1;">En attente des données MT5...</div>';
+                return;
+            }
+            
+            let html = '';
+            let displayed = 0;
+            
+            symbols.forEach(sym => {
+                const signal = allSymbolsSignals[sym];
+                const confluence = signal.confluence || {};
+                const finalSignal = confluence.final_signal || 'NEUTRAL';
+                const bullScore = confluence.bullish_score || 0;
+                const bearScore = confluence.bearish_score || 0;
+                
+                // Filtrer par signal de confluence
+                if (filter !== 'all' && finalSignal !== filter) return;
+                
+                displayed++;
+                
+                // Couleurs et icônes selon le signal
+                let signalColor, signalIcon, signalBg;
+                switch(finalSignal) {
+                    case 'STRONG_BUY':
+                        signalColor = '#00ff88';
+                        signalIcon = '🔥';
+                        signalBg = 'rgba(0,255,136,0.2)';
+                        break;
+                    case 'BUY':
+                        signalColor = '#4ecdc4';
+                        signalIcon = '📈';
+                        signalBg = 'rgba(78,205,196,0.1)';
+                        break;
+                    case 'STRONG_SELL':
+                        signalColor = '#ff4444';
+                        signalIcon = '💀';
+                        signalBg = 'rgba(255,68,68,0.2)';
+                        break;
+                    case 'SELL':
+                        signalColor = '#ff6b6b';
+                        signalIcon = '📉';
+                        signalBg = 'rgba(255,107,107,0.1)';
+                        break;
+                    default:
+                        signalColor = '#888';
+                        signalIcon = '➖';
+                        signalBg = 'rgba(0,0,0,0.3)';
+                }
+                
+                const momentumBadge = signal.momentum_shift ? 
+                    '<span style="background:#ffa500;color:#000;padding:2px 6px;border-radius:3px;font-size:10px;">⚡SHIFT</span>' : '';
+                
+                const isSelected = sym === selectedDetailSymbol;
+                const borderColor = isSelected ? '#00d4ff' : '#333';
+                const borderWidth = isSelected ? '2px' : '1px';
+                
+                const price = signal.bid ? signal.bid.toFixed(5) : '--';
+                
+                html += `
+                    <div onclick="selectSymbolDetail('${sym}')" 
+                         style="background: ${signalBg}; padding: 15px; border-radius: 8px; cursor: pointer; 
+                                border: ${borderWidth} solid ${borderColor}; transition: all 0.2s;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="font-weight: bold; font-size: 16px;">${sym}</span>
+                            <span style="font-size: 20px;">${signalIcon}</span>
+                        </div>
+                        <div style="margin-top: 8px; display: flex; align-items: center; gap: 5px;">
+                            <span style="color: ${signalColor}; font-weight: bold; font-size: 13px;">${finalSignal.replace('_', ' ')}</span>
+                            ${momentumBadge}
+                        </div>
+                        <div style="margin-top: 8px; font-size: 12px;">
+                            <span style="color: #00ff88;">${bullScore.toFixed(0)}%</span> / 
+                            <span style="color: #ff4444;">${bearScore.toFixed(0)}%</span>
+                        </div>
+                        <div style="margin-top: 5px; font-size: 14px; color: #fff;">${price}</div>
+                    </div>
+                `;
+            });
+            
+            if (displayed === 0) {
+                html = '<div style="text-align: center; color: #666; padding: 20px; grid-column: 1/-1;">Aucun symbole avec ce filtre</div>';
+            }
+            
+            grid.innerHTML = html;
+        }
+        
+        // Sélectionner un symbole pour afficher les détails
+        function selectSymbolDetail(sym) {
+            console.log('[SELECT] Symbole:', sym);
+            selectedDetailSymbol = sym;
+            
+            const select = document.getElementById('detail-symbol-select');
+            if (select) select.value = sym;
+            
+            if (allSymbolsSignals[sym]) {
+                updateCurrentSignal(allSymbolsSignals[sym]);
+            }
+            updateMultiSymbolsGrid();
+        }
+        
+        // Mettre à jour le sélecteur de symbole
+        function updateDetailSymbolSelect() {
+            const select = document.getElementById('detail-symbol-select');
+            if (!select) return;
+            
+            const symbols = Object.keys(allSymbolsSignals);
+            const currentValue = select.value;
+            
+            // Reconstruire les options
+            let options = '<option value="">-- Sélectionner un symbole --</option>';
+            symbols.forEach(sym => {
+                const signal = allSymbolsSignals[sym];
+                const confluence = signal.confluence || {};
+                const finalSignal = confluence.final_signal || 'NEUTRAL';
+                const selected = sym === selectedDetailSymbol ? ' selected' : '';
+                options += `<option value="${sym}"${selected}>${sym} (${finalSignal.replace('_', ' ')})</option>`;
+            });
+            select.innerHTML = options;
+        }
+        
+        // Callback du sélecteur
+        function selectDetailSymbol() {
+            const select = document.getElementById('detail-symbol-select');
+            if (select && select.value) {
+                selectSymbolDetail(select.value);
+            }
+        }
+        
+        // Filtrer les symboles
+        function filterSymbols() {
+            updateMultiSymbolsGrid();
+        }
+        
+        socket.on('account_update', (data) => {
+            accountInfo = data;
+            updateAccountInfo();
+        });
+        
+        socket.on('positions_update', (data) => {
+            updatePositionsTable(data.positions);
+        });
+        
+        // ========================================
+        // Tabs Navigation
+        // ========================================
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                tab.classList.add('active');
+                document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+            });
+        });
+        
+        // ========================================
+        // Signal Updates
+        // ========================================
+        function updateCurrentSignal(signal) {
+            console.log('[UPDATE] Signal détail:', signal.symbol);
+            
+            // Mettre à jour le symbole si c'est le symbole du graphique MT5
+            if (signal.symbol && signal.symbol !== 'UNKNOWN') {
+                const select = document.getElementById('symbol-select');
+                if (select) {
+                    const exists = Array.from(select.options).some(opt => opt.value === signal.symbol);
+                    if (!exists) {
+                        const option = document.createElement('option');
+                        option.value = signal.symbol;
+                        option.text = signal.symbol + ' (MT5)';
+                        select.appendChild(option);
+                    }
+                }
+            }
+            
+            // Symbole et tendance
+            const symEl = document.getElementById('current-symbol');
+            if (symEl) symEl.textContent = signal.symbol || '--';
+            
+            const trendEl = document.getElementById('current-trend');
+            if (trendEl) {
+                trendEl.textContent = signal.trend || 'NEUTRAL';
+                trendEl.className = 'value trend-' + (signal.trend || 'neutral').toLowerCase();
+            }
+            
+            // Momentum
+            const momentumBox = document.getElementById('momentum-box');
+            const momentumEl = document.getElementById('current-momentum');
+            if (momentumEl) {
+                if (signal.momentum_shift) {
+                    momentumEl.textContent = 'OUI!';
+                    if (momentumBox) momentumBox.classList.add('momentum-shift');
+                    showToast(`⚡ MOMENTUM SHIFT: ${signal.trend}`, 'warning');
+                } else {
+                    momentumEl.textContent = 'Non';
+                    if (momentumBox) momentumBox.classList.remove('momentum-shift');
+                }
+            }
+            
+            // Prix
+            const priceEl = document.getElementById('current-price');
+            if (priceEl && signal.bid && signal.ask) {
+                priceEl.textContent = signal.bid.toFixed(5) + ' / ' + signal.ask.toFixed(5);
+            }
+            
+            // Heikin Ashi
+            const haOpen = document.getElementById('ha-open');
+            const haHigh = document.getElementById('ha-high');
+            const haLow = document.getElementById('ha-low');
+            const haClose = document.getElementById('ha-close');
+            if (haOpen) haOpen.textContent = (signal.ha_open || 0).toFixed(5);
+            if (haHigh) haHigh.textContent = (signal.ha_high || 0).toFixed(5);
+            if (haLow) haLow.textContent = (signal.ha_low || 0).toFixed(5);
+            if (haClose) haClose.textContent = (signal.ha_close || 0).toFixed(5);
+            
+            // Critical Zones - afficher même si 0
+            const resEl = document.getElementById('zone-resistance');
+            const supEl = document.getElementById('zone-support');
+            if (resEl) resEl.textContent = signal.resistance > 0 ? signal.resistance.toFixed(5) : '--';
+            if (supEl) supEl.textContent = signal.support > 0 ? signal.support.toFixed(5) : '--';
+            
+            // Supply Demand
+            const supplyEl = document.getElementById('zone-supply');
+            const demandEl = document.getElementById('zone-demand');
+            if (supplyEl) supplyEl.textContent = signal.supply_zone > 0 ? signal.supply_zone.toFixed(5) : '--';
+            if (demandEl) demandEl.textContent = signal.demand_zone > 0 ? signal.demand_zone.toFixed(5) : '--';
+            
+            // VWAP
+            const vwapEl = document.getElementById('vwap-value');
+            const vwapUpEl = document.getElementById('vwap-upper');
+            const vwapLoEl = document.getElementById('vwap-lower');
+            if (vwapEl) vwapEl.textContent = signal.vwap > 0 ? signal.vwap.toFixed(5) : '--';
+            if (vwapUpEl) vwapUpEl.textContent = signal.vwap_upper > 0 ? signal.vwap_upper.toFixed(5) : '--';
+            if (vwapLoEl) vwapLoEl.textContent = signal.vwap_lower > 0 ? signal.vwap_lower.toFixed(5) : '--';
+            
+            // POC
+            const pocEl = document.getElementById('poc-value');
+            if (pocEl) pocEl.textContent = signal.poc > 0 ? signal.poc.toFixed(5) : '--';
+            
+            // Price Position
+            const positionEl = document.getElementById('price-position');
+            if (positionEl && signal.price_position) {
+                let posClass = '';
+                let posText = signal.price_position;
+                if (signal.price_position === 'ABOVE_VWAP') {
+                    posClass = 'badge-bullish';
+                    posText = '📈 Au-dessus VWAP';
+                } else if (signal.price_position === 'BELOW_VWAP') {
+                    posClass = 'badge-bearish';
+                    posText = '📉 En-dessous VWAP';
+                } else {
+                    posText = '➖ Neutre';
+                }
+                positionEl.className = 'trend-badge ' + posClass;
+                positionEl.textContent = posText;
+            }
+            
+            // Super Trend
+            const stDirEl = document.getElementById('supertrend-direction');
+            const stLevelEl = document.getElementById('supertrend-level');
+            if (stDirEl) {
+                const dir = signal.supertrend_direction || 'NEUTRAL';
+                stDirEl.textContent = dir;
+                stDirEl.style.color = dir === 'BULLISH' ? '#00ff88' : dir === 'BEARISH' ? '#ff4444' : '#888';
+            }
+            if (stLevelEl) {
+                let level = '--';
+                if (signal.supertrend_direction === 'BULLISH' && signal.supertrend_up > 0) {
+                    level = signal.supertrend_up.toFixed(5);
+                } else if (signal.supertrend_direction === 'BEARISH' && signal.supertrend_down > 0) {
+                    level = signal.supertrend_down.toFixed(5);
+                }
+                stLevelEl.textContent = level;
+            }
+            
+            // Fibo Expansion
+            const fibo1 = document.getElementById('fibo-level1');
+            const fibo2 = document.getElementById('fibo-level2');
+            const fibo3 = document.getElementById('fibo-level3');
+            if (fibo1) fibo1.textContent = signal.fibo_level1 > 0 ? signal.fibo_level1.toFixed(5) : '--';
+            if (fibo2) fibo2.textContent = signal.fibo_level2 > 0 ? signal.fibo_level2.toFixed(5) : '--';
+            if (fibo3) fibo3.textContent = signal.fibo_level3 > 0 ? signal.fibo_level3.toFixed(5) : '--';
+            
+            // Harmonic Pattern
+            const harmEl = document.getElementById('harmonic-pattern');
+            if (harmEl) {
+                const pattern = signal.harmonic_pattern || 'NONE';
+                let text = 'AUCUN';
+                let color = '#888';
+                if (pattern === 'BULLISH') {
+                    text = 'BULLISH';
+                    color = '#00ff88';
+                } else if (pattern === 'BEARISH') {
+                    text = 'BEARISH';
+                    color = '#ff4444';
+                } else if (pattern === 'DETECTED') {
+                    text = 'DÉTECTÉ';
+                    color = '#ffa500';
+                }
+                harmEl.textContent = text;
+                harmEl.style.color = color;
+            }
+            
+            // =============================================
+            // NOUVEAUX INDICATEURS
+            // =============================================
+            
+            // Candle Pattern
+            const candleEl = document.getElementById('candle-pattern');
+            if (candleEl) {
+                const pattern = signal.candle_pattern || 'NONE';
+                candleEl.textContent = pattern === 'NONE' ? '--' : pattern;
+                candleEl.style.color = pattern === 'BULLISH' ? '#00ff88' : pattern === 'BEARISH' ? '#ff4444' : '#888';
+            }
+            
+            // Bollinger RSI
+            const bollEl = document.getElementById('bollinger-direction');
+            if (bollEl) {
+                const dir = signal.bollinger_direction || 'NEUTRAL';
+                bollEl.textContent = dir;
+                bollEl.style.color = dir === 'BULLISH' ? '#00ff88' : dir === 'BEARISH' ? '#ff4444' : '#888';
+            }
+            
+            // FVG
+            const fvgTypeEl = document.getElementById('fvg-type');
+            const fvgHighEl = document.getElementById('fvg-high');
+            const fvgLowEl = document.getElementById('fvg-low');
+            if (fvgTypeEl) {
+                const fvgType = signal.fvg_type || 'NONE';
+                fvgTypeEl.textContent = fvgType === 'NONE' ? '--' : fvgType;
+                fvgTypeEl.style.color = fvgType === 'BULLISH' ? '#00ff88' : fvgType === 'BEARISH' ? '#ff4444' : '#888';
+            }
+            if (fvgHighEl) fvgHighEl.textContent = signal.fvg_high > 0 ? signal.fvg_high.toFixed(5) : '--';
+            if (fvgLowEl) fvgLowEl.textContent = signal.fvg_low > 0 ? signal.fvg_low.toFixed(5) : '--';
+            
+            // MACD Intraday
+            const macdTrendEl = document.getElementById('macd-trend');
+            const macdMainEl = document.getElementById('macd-main');
+            const macdSignalEl = document.getElementById('macd-signal');
+            if (macdTrendEl) {
+                const trend = signal.macd_trend || 'NEUTRAL';
+                macdTrendEl.textContent = trend;
+                macdTrendEl.style.color = trend === 'BULLISH' ? '#00ff88' : trend === 'BEARISH' ? '#ff4444' : '#888';
+            }
+            if (macdMainEl) macdMainEl.textContent = signal.macd_main ? signal.macd_main.toFixed(5) : '--';
+            if (macdSignalEl) macdSignalEl.textContent = signal.macd_signal ? signal.macd_signal.toFixed(5) : '--';
+            
+            // Pro Support Resistance
+            const proResEl = document.getElementById('pro-resistance');
+            const proSupEl = document.getElementById('pro-support');
+            if (proResEl) proResEl.textContent = signal.pro_resistance > 0 ? signal.pro_resistance.toFixed(5) : '--';
+            if (proSupEl) proSupEl.textContent = signal.pro_support > 0 ? signal.pro_support.toFixed(5) : '--';
+            
+            // =============================================
+            // MISE À JOUR CONFLUENCE
+            // =============================================
+            updateConfluenceDisplay(signal);
+        }
+        
+        // Mettre à jour l'affichage de la confluence
+        function updateConfluenceDisplay(signal) {
+            const confluence = signal.confluence;
+            if (!confluence) return;
+            
+            const finalSignal = confluence.final_signal || 'NEUTRAL';
+            const bullScore = confluence.bullish_score || 0;
+            const bearScore = confluence.bearish_score || 0;
+            const indicators = confluence.indicators || [];
+            
+            // Signal principal
+            const signalEl = document.getElementById('confluence-signal');
+            if (signalEl) {
+                let color, bg;
+                switch(finalSignal) {
+                    case 'STRONG_BUY':
+                        color = '#00ff88';
+                        bg = 'linear-gradient(135deg, rgba(0,255,136,0.3), rgba(0,212,255,0.2))';
+                        break;
+                    case 'BUY':
+                        color = '#4ecdc4';
+                        bg = 'rgba(78,205,196,0.2)';
+                        break;
+                    case 'STRONG_SELL':
+                        color = '#ff4444';
+                        bg = 'linear-gradient(135deg, rgba(255,68,68,0.3), rgba(255,107,107,0.2))';
+                        break;
+                    case 'SELL':
+                        color = '#ff6b6b';
+                        bg = 'rgba(255,107,107,0.2)';
+                        break;
+                    default:
+                        color = '#888';
+                        bg = 'rgba(0,0,0,0.3)';
+                }
+                signalEl.textContent = finalSignal.replace('_', ' ');
+                signalEl.style.color = color;
+                signalEl.style.background = bg;
+            }
+            
+            // Barres de progression
+            const bullBar = document.getElementById('bullish-bar');
+            const bearBar = document.getElementById('bearish-bar');
+            const bullPct = document.getElementById('bullish-percent');
+            const bearPct = document.getElementById('bearish-percent');
+            
+            if (bullBar) bullBar.style.width = bullScore + '%';
+            if (bearBar) bearBar.style.width = bearScore + '%';
+            if (bullPct) bullPct.textContent = bullScore.toFixed(0) + '%';
+            if (bearPct) bearPct.textContent = bearScore.toFixed(0) + '%';
+            
+            // Compteur d'indicateurs
+            const countEl = document.getElementById('indicators-count');
+            if (countEl) countEl.textContent = confluence.total_indicators || 0;
+            
+            // Détail des indicateurs
+            const detailEl = document.getElementById('indicators-detail');
+            if (detailEl && indicators.length > 0) {
+                let html = '';
+                indicators.forEach(ind => {
+                    let icon, color;
+                    if (ind.signal === 'BULLISH') {
+                        icon = '🟢';
+                        color = '#00ff88';
+                    } else if (ind.signal === 'BEARISH') {
+                        icon = '🔴';
+                        color = '#ff4444';
+                    } else {
+                        icon = '⚪';
+                        color = '#888';
+                    }
+                    html += `
+                        <div style="display: flex; align-items: center; gap: 8px; padding: 5px 10px; background: rgba(0,0,0,0.2); border-radius: 5px;">
+                            <span>${icon}</span>
+                            <span style="color: ${color}; font-size: 12px;">${ind.name}</span>
+                        </div>
+                    `;
+                });
+                detailEl.innerHTML = html;
+            }
+        }
+        
+        // Liste des alertes
+        let alertsList = [];
+        
+        // Ajouter une alerte intelligente
+        function addSmartAlert(signal) {
+            const confluence = signal.confluence;
+            if (!confluence) return;
+            
+            const finalSignal = confluence.final_signal;
+            const sym = signal.symbol;
+            
+            // Alerter seulement pour STRONG signals ou Momentum Shift
+            if (finalSignal !== 'STRONG_BUY' && finalSignal !== 'STRONG_SELL' && !signal.momentum_shift) return;
+            
+            const alertsCard = document.getElementById('alerts-card');
+            const alertsContainer = document.getElementById('alerts-container');
+            if (!alertsCard || !alertsContainer) return;
+            
+            alertsCard.style.display = 'block';
+            
+            const time = new Date().toLocaleTimeString('fr-FR');
+            let alertType, alertIcon, alertColor, alertText;
+            
+            if (finalSignal === 'STRONG_BUY') {
+                alertType = 'STRONG BUY';
+                alertIcon = '🔥';
+                alertColor = '#00ff88';
+                alertText = `${sym} - Confluence forte à l'achat (${confluence.bullish_score.toFixed(0)}%)`;
+            } else if (finalSignal === 'STRONG_SELL') {
+                alertType = 'STRONG SELL';
+                alertIcon = '💀';
+                alertColor = '#ff4444';
+                alertText = `${sym} - Confluence forte à la vente (${confluence.bearish_score.toFixed(0)}%)`;
+            } else if (signal.momentum_shift) {
+                alertType = 'MOMENTUM SHIFT';
+                alertIcon = '⚡';
+                alertColor = '#ffa500';
+                alertText = `${sym} - Changement de momentum détecté`;
+            }
+            
+            // Éviter les doublons
+            const alertKey = `${sym}-${alertType}`;
+            if (alertsList.includes(alertKey)) return;
+            alertsList.push(alertKey);
+            if (alertsList.length > 20) alertsList.shift();
+            
+            const alertEl = document.createElement('div');
+            alertEl.style.cssText = `
+                display: flex; align-items: center; gap: 10px; padding: 10px;
+                background: rgba(0,0,0,0.3); border-radius: 5px; margin-bottom: 8px;
+                border-left: 3px solid ${alertColor};
+            `;
+            alertEl.innerHTML = `
+                <span style="font-size: 20px;">${alertIcon}</span>
+                <div style="flex: 1;">
+                    <div style="font-size: 11px; color: #666;">${time}</div>
+                    <div style="color: ${alertColor}; font-weight: bold;">${alertText}</div>
+                </div>
+                <button onclick="this.parentElement.remove()" style="background: none; border: none; color: #666; cursor: pointer; font-size: 16px;">✕</button>
+            `;
+            
+            alertsContainer.insertBefore(alertEl, alertsContainer.firstChild);
+            
+            // Limiter le nombre d'alertes
+            while (alertsContainer.children.length > 10) {
+                alertsContainer.removeChild(alertsContainer.lastChild);
+            }
+            
+            // Son d'alerte (optionnel)
+            // new Audio('/static/alert.mp3').play();
+            
+            // Toast notification
+            showToast(`${alertIcon} ${alertType}: ${sym}`, finalSignal.includes('BUY') ? 'success' : 'error');
+        }
+        
+        function addToHistory(signal) {
+            const history = document.getElementById('signal-history');
+            if (history.children.length === 1 && history.children[0].style.color) {
+                history.innerHTML = '';
+            }
+            
+            const item = document.createElement('div');
+            item.className = 'signal-item';
+            const time = new Date(signal.timestamp).toLocaleTimeString('fr-FR');
+            const trendClass = signal.trend.toLowerCase() === 'bullish' ? 'badge-bullish' : 'badge-bearish';
+            const momentumBadge = signal.momentum_shift ? '<span class="trend-badge badge-momentum">⚡ SHIFT</span>' : '';
+            
+            item.innerHTML = `
+                <span style="color:#666;">${time}</span>
+                <span style="font-weight:bold;">${signal.symbol}</span>
+                <div>${momentumBadge}<span class="trend-badge ${trendClass}">${signal.trend}</span></div>
+            `;
+            
+            history.insertBefore(item, history.firstChild);
+            while (history.children.length > 50) history.removeChild(history.lastChild);
+        }
+        
+        // ========================================
+        // Trading Functions
+        // ========================================
+        async function sendTrade(action) {
+            const sl = parseInt(document.getElementById('trade-sl').value);
+            const tp = parseInt(document.getElementById('trade-tp').value);
+            const volume = getCalculatedLot();
+            
+            // Validation Money Management
+            if (!validateTrade(volume, sl, tp)) return;
+            
+            const trade = {
+                symbol: document.getElementById('trade-symbol').value,
+                action: action,
+                volume: volume,
+                sl: sl,
+                tp: tp,
+                trailing: document.getElementById('enable-trailing').checked ? 
+                          parseInt(document.getElementById('trailing-distance').value) : 0,
+                breakeven: document.getElementById('enable-breakeven').checked ?
+                           parseInt(document.getElementById('breakeven-trigger').value) : 0
+            };
+            
+            try {
+                const response = await fetch('/api/trade', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(trade)
+                });
+                
+                const result = await response.json();
+                if (result.status === 'success') {
+                    showToast(`✅ ${action} ${trade.symbol} - ${volume} lots envoyé`, 'success');
+                } else {
+                    showToast(`❌ Erreur: ${result.message}`, 'error');
+                }
+            } catch (error) {
+                showToast(`❌ Erreur connexion: ${error}`, 'error');
+            }
+        }
+        
+        function validateTrade(volume, sl, tp) {
+            const settings = mmSettings;
+            
+            // Vérifier ratio R:R
+            const rr = tp / sl;
+            if (rr < parseFloat(document.getElementById('min-rr').value)) {
+                showToast(`❌ Ratio R:R (${rr.toFixed(1)}) inférieur au minimum`, 'error');
+                return false;
+            }
+            
+            // Vérifier lot max
+            if (volume > parseFloat(document.getElementById('max-lot').value)) {
+                showToast(`❌ Volume dépasse le maximum autorisé`, 'error');
+                return false;
+            }
+            
+            // Vérifier risque
+            const riskAmount = volume * sl * 10; // Approximation
+            const riskPercent = (riskAmount / accountInfo.balance) * 100;
+            const maxRisk = parseFloat(document.getElementById('max-risk-slider').value);
+            
+            if (riskPercent > maxRisk) {
+                showToast(`❌ Risque (${riskPercent.toFixed(1)}%) dépasse le maximum (${maxRisk}%)`, 'error');
+                return false;
+            }
+            
+            return true;
+        }
+        
+        function getCalculatedLot() {
+            const mode = document.getElementById('lot-mode').value;
+            const sl = parseInt(document.getElementById('trade-sl').value);
+            
+            if (mode === 'fixed') {
+                return parseFloat(document.getElementById('trade-volume').value);
+            }
+            
+            if (mode === 'risk') {
+                const riskPercent = parseFloat(document.getElementById('risk-percent').value);
+                const riskAmount = accountInfo.balance * (riskPercent / 100);
+                // Calcul simplifié: lot = riskAmount / (SL en pips * 10)
+                let lot = riskAmount / (sl * 10);
+                lot = Math.max(0.01, Math.min(lot, parseFloat(document.getElementById('max-lot').value)));
+                return Math.round(lot * 100) / 100;
+            }
+            
+            if (mode === 'balance') {
+                const balancePercent = parseFloat(document.getElementById('risk-percent').value);
+                let lot = (accountInfo.balance * balancePercent / 100) / 1000;
+                lot = Math.max(0.01, Math.min(lot, parseFloat(document.getElementById('max-lot').value)));
+                return Math.round(lot * 100) / 100;
+            }
+            
+            return 0.01;
+        }
+        
+        function updateLotCalculation() {
+            const mode = document.getElementById('lot-mode').value;
+            document.getElementById('lot-fixed-group').style.display = mode === 'fixed' ? 'flex' : 'none';
+            document.getElementById('risk-percent-group').style.display = mode !== 'fixed' ? 'flex' : 'none';
+            document.getElementById('risk-percent-group').querySelector('label').textContent = 
+                mode === 'risk' ? 'Risque %' : 'Balance %';
+            
+            updateCalculatedLot();
+        }
+        
+        function updateCalculatedLot() {
+            const lot = getCalculatedLot();
+            document.getElementById('calculated-lot').value = lot.toFixed(2);
+            
+            // Update R:R
+            const sl = parseInt(document.getElementById('trade-sl').value) || 1;
+            const tp = parseInt(document.getElementById('trade-tp').value) || 1;
+            document.getElementById('trade-rr').value = `1:${(tp/sl).toFixed(1)}`;
+        }
+        
+        // Event listeners for lot calculation
+        ['trade-sl', 'trade-tp', 'trade-volume', 'risk-percent'].forEach(id => {
+            document.getElementById(id).addEventListener('input', updateCalculatedLot);
+        });
+        
+        // ========================================
+        // Positions Management
+        // ========================================
+        function updatePositionsTable(positions) {
+            const tbody = document.getElementById('positions-body');
+            
+            if (!positions || positions.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:#666;">Aucune position ouverte</td></tr>';
+                document.getElementById('total-positions').textContent = '0';
+                document.getElementById('total-pnl').textContent = '$0.00';
+                return;
+            }
+            
+            let totalPnl = 0;
+            tbody.innerHTML = positions.map(pos => {
+                totalPnl += pos.profit;
+                const profitClass = pos.profit >= 0 ? 'profit-positive' : 'profit-negative';
+                const typeClass = pos.type === 'BUY' ? 'trend-bullish' : 'trend-bearish';
+                
+                return `
+                    <tr>
+                        <td>${pos.ticket}</td>
+                        <td>${pos.symbol}</td>
+                        <td class="${typeClass}">${pos.type}</td>
+                        <td>${pos.volume}</td>
+                        <td>${pos.open_price.toFixed(5)}</td>
+                        <td>${pos.current_price.toFixed(5)}</td>
+                        <td>${pos.sl > 0 ? pos.sl.toFixed(5) : '--'}</td>
+                        <td>${pos.tp > 0 ? pos.tp.toFixed(5) : '--'}</td>
+                        <td class="${profitClass}">$${pos.profit.toFixed(2)}</td>
+                        <td>
+                            <button class="btn btn-close" style="padding:5px 10px;font-size:12px;" 
+                                    onclick="closePosition(${pos.ticket})">✖</button>
+                            <button class="btn btn-info" style="padding:5px 10px;font-size:12px;"
+                                    onclick="modifyPosition(${pos.ticket})">✏️</button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+            
+            document.getElementById('total-positions').textContent = positions.length;
+            const pnlEl = document.getElementById('total-pnl');
+            pnlEl.textContent = `$${totalPnl.toFixed(2)}`;
+            pnlEl.className = totalPnl >= 0 ? 'profit-positive' : 'profit-negative';
+        }
+        
+        async function closePosition(ticket) {
+            if (!confirm(`Fermer la position #${ticket}?`)) return;
+            
+            try {
+                const response = await fetch('/api/close_position', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ ticket: ticket })
+                });
+                const result = await response.json();
+                if (result.status === 'success') {
+                    showToast(`✅ Position #${ticket} fermée`, 'success');
+                    refreshPositions();
+                }
+            } catch (error) {
+                showToast('❌ Erreur fermeture position', 'error');
+            }
+        }
+        
+        async function closeAllPositions() {
+            if (!confirm('Fermer TOUTES les positions?')) return;
+            
+            try {
+                const response = await fetch('/api/close_all', { method: 'POST' });
+                const result = await response.json();
+                showToast(`✅ ${result.closed} positions fermées`, 'success');
+                refreshPositions();
+            } catch (error) {
+                showToast('❌ Erreur fermeture positions', 'error');
+            }
+        }
+        
+        async function refreshPositions() {
+            try {
+                const response = await fetch('/api/positions');
+                const data = await response.json();
+                updatePositionsTable(data.positions);
+            } catch (error) {
+                console.error('Erreur refresh positions:', error);
+            }
+        }
+        
+        // ========================================
+        // Gestion des Trades en Attente
+        // ========================================
+        async function refreshPendingTrades() {
+            try {
+                const response = await fetch('/api/pending_trades_list');
+                const data = await response.json();
+                updatePendingTradesDisplay(data.trades);
+            } catch (error) {
+                console.error('Erreur refresh pending trades:', error);
+            }
+        }
+        
+        function updatePendingTradesDisplay(trades) {
+            const container = document.getElementById('pending-trades-list');
+            document.getElementById('pending-count').textContent = trades.length;
+            
+            if (!trades || trades.length === 0) {
+                container.innerHTML = '<div style="text-align: center; color: #666; padding: 20px;">Aucune commande en attente</div>';
+                return;
+            }
+            
+            container.innerHTML = trades.map(trade => {
+                let actionColor = '#00d4ff';
+                let actionIcon = '📤';
+                if (trade.action === 'CLOSE') {
+                    actionColor = '#ff4444';
+                    actionIcon = '❌';
+                } else if (trade.action === 'BUY') {
+                    actionColor = '#00ff88';
+                    actionIcon = '📈';
+                } else if (trade.action === 'SELL') {
+                    actionColor = '#ff4444';
+                    actionIcon = '📉';
+                } else if (trade.action === 'MODIFY') {
+                    actionColor = '#ffa500';
+                    actionIcon = '✏️';
+                } else if (trade.action === 'CLOSE_ALL') {
+                    actionColor = '#ff0000';
+                    actionIcon = '🔴';
+                }
+                
+                let details = '';
+                if (trade.action === 'CLOSE' && trade.ticket) {
+                    details = `Ticket: #${trade.ticket}`;
+                } else if (trade.action === 'BUY' || trade.action === 'SELL') {
+                    details = `${trade.symbol} ${trade.volume} lots`;
+                } else if (trade.action === 'MODIFY') {
+                    details = `Ticket: #${trade.ticket} SL:${trade.sl || '--'} TP:${trade.tp || '--'}`;
+                }
+                
+                return `
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px; margin: 5px 0; background: rgba(0,0,0,0.2); border-radius: 5px; border-left: 3px solid ${actionColor};">
+                        <div>
+                            <span style="font-size: 16px;">${actionIcon}</span>
+                            <strong style="color: ${actionColor};">${trade.action}</strong>
+                            <span style="color: #888; margin-left: 10px;">${details}</span>
+                        </div>
+                        <div>
+                            <span style="color: #666; font-size: 12px;">${trade.timestamp || ''}</span>
+                            <button class="btn btn-close" style="padding: 3px 8px; font-size: 11px; margin-left: 10px;" 
+                                    onclick="cancelPendingTrade(${trade.id})">Annuler</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        async function cancelPendingTrade(tradeId) {
+            try {
+                const response = await fetch(`/api/cancel_trade/${tradeId}`, { method: 'POST' });
+                const result = await response.json();
+                if (result.status === 'success') {
+                    showToast('✅ Commande annulée', 'success');
+                    refreshPendingTrades();
+                } else {
+                    showToast('❌ ' + (result.message || 'Erreur'), 'error');
+                }
+            } catch (error) {
+                showToast('❌ Erreur annulation', 'error');
+            }
+        }
+        
+        async function clearAllPending() {
+            if (!confirm('Annuler TOUTES les commandes en attente?')) return;
+            
+            try {
+                const response = await fetch('/api/clear_pending', { method: 'POST' });
+                const result = await response.json();
+                showToast(`✅ ${result.cleared} commandes annulées`, 'success');
+                refreshPendingTrades();
+            } catch (error) {
+                showToast('❌ Erreur', 'error');
+            }
+        }
+        
+        // Rafraîchir les pending trades régulièrement
+        setInterval(refreshPendingTrades, 3000);
+        
+        function modifyPosition(ticket) {
+            const newSL = prompt('Nouveau SL (laisser vide pour ignorer):');
+            const newTP = prompt('Nouveau TP (laisser vide pour ignorer):');
+            
+            if (!newSL && !newTP) return;
+            
+            fetch('/api/modify_position', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ 
+                    ticket: ticket,
+                    sl: newSL ? parseFloat(newSL) : null,
+                    tp: newTP ? parseFloat(newTP) : null
+                })
+            }).then(r => r.json()).then(result => {
+                if (result.status === 'success') {
+                    showToast('✅ Position modifiée', 'success');
+                    refreshPositions();
+                }
+            });
+        }
+        
+        // ========================================
+        // Money Management Settings
+        // ========================================
+        function updateSliderValue(name) {
+            const slider = document.getElementById(name + '-slider');
+            document.getElementById(name + '-value').textContent = slider.value + '%';
+        }
+        
+        function saveMMSettings() {
+            mmSettings = {
+                maxRisk: parseFloat(document.getElementById('max-risk-slider').value),
+                dailyLoss: parseFloat(document.getElementById('daily-loss-slider').value),
+                minLot: parseFloat(document.getElementById('min-lot').value),
+                maxLot: parseFloat(document.getElementById('max-lot').value),
+                maxPositions: parseInt(document.getElementById('max-positions').value),
+                minRR: parseFloat(document.getElementById('min-rr').value),
+                blockOnDailyLoss: document.getElementById('block-on-daily-loss').checked,
+                reduceAfterLoss: document.getElementById('reduce-after-loss').checked,
+                increaseAfterWin: document.getElementById('increase-after-win').checked
+            };
+            
+            localStorage.setItem('mmSettings', JSON.stringify(mmSettings));
+            showToast('✅ Paramètres sauvegardés', 'success');
+        }
+        
+        function loadMMSettings() {
+            const saved = localStorage.getItem('mmSettings');
+            return saved ? JSON.parse(saved) : {
+                maxRisk: 1, dailyLoss: 3, minLot: 0.01, maxLot: 1,
+                maxPositions: 3, minRR: 2, blockOnDailyLoss: true,
+                reduceAfterLoss: false, increaseAfterWin: false
+            };
+        }
+        
+        function resetMMSettings() {
+            localStorage.removeItem('mmSettings');
+            location.reload();
+        }
+        
+        // ========================================
+        // Toggle Options
+        // ========================================
+        document.getElementById('enable-trailing').addEventListener('change', function() {
+            document.getElementById('trailing-group').style.display = this.checked ? 'flex' : 'none';
+        });
+        
+        document.getElementById('enable-breakeven').addEventListener('change', function() {
+            document.getElementById('breakeven-group').style.display = this.checked ? 'flex' : 'none';
+        });
+        
+        document.getElementById('enable-partial').addEventListener('change', function() {
+            document.getElementById('partial-group').style.display = this.checked ? 'block' : 'none';
+        });
+        
+        // ========================================
+        // Account Info Update
+        // ========================================
+        function updateAccountInfo() {
+            // Header balance
+            const headerBal = document.getElementById('header-balance');
+            if (headerBal) headerBal.textContent = `Balance: $${accountInfo.balance.toFixed(2)}`;
+            
+            // Onglet Trading - Infos compte
+            const accBal = document.getElementById('account-balance');
+            if (accBal) accBal.textContent = `$${accountInfo.balance.toFixed(2)}`;
+            
+            const accEq = document.getElementById('account-equity');
+            if (accEq) accEq.textContent = `$${accountInfo.equity.toFixed(2)}`;
+            
+            const accMarg = document.getElementById('account-margin');
+            if (accMarg) accMarg.textContent = `$${accountInfo.margin.toFixed(2)}`;
+            
+            const accFree = document.getElementById('account-free-margin');
+            if (accFree) accFree.textContent = `$${accountInfo.freeMargin.toFixed(2)}`;
+        }
+        
+        // ========================================
+        // Toast Notifications
+        // ========================================
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = 'toast ' + type;
+            toast.innerHTML = message;
+            container.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                setTimeout(() => toast.remove(), 300);
+            }, 5000);
+        }
+        
+        // ========================================
+        // Stats & Init
+        // ========================================
+        async function loadStats() {
+            try {
+                const response = await fetch('/api/stats');
+                const data = await response.json();
+                document.getElementById('stat-bullish').textContent = data.trend_stats.BULLISH || 0;
+                document.getElementById('stat-bearish').textContent = data.trend_stats.BEARISH || 0;
+                document.getElementById('stat-momentum').textContent = data.momentum_shifts_24h || 0;
+            } catch (error) {
+                console.error('Erreur stats:', error);
+            }
+        }
+        
+        async function loadHistory() {
+            try {
+                const response = await fetch('/api/signals/history?limit=50');
+                const data = await response.json();
+                data.signals.reverse().forEach(signal => addToHistory(signal));
+                if (data.signals.length > 0) {
+                    updateCurrentSignal(data.signals[data.signals.length - 1]);
+                }
+            } catch (error) {
+                console.error('Erreur historique:', error);
+            }
+        }
+        
+        // Init
+        loadStats();
+        loadHistory();
+        updateAccountInfo();
+        updateLotCalculation();
+        setInterval(loadStats, 60000);
+        setInterval(refreshPositions, 5000);
+    </script>
+</body>
+</html>
